@@ -1,0 +1,2 @@
+curl -u skup:skup http://localhost:4151/soap-api/external/skup/denylist/?wsdl -v
+curl -u skup:skup http://localhost:4151/soap-api/external/skup?wsdl -v

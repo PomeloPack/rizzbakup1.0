@@ -1,0 +1,74 @@
+#Nastaveni prostredi
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+#################################################################
+
+#CLEARCACHE PRI ZMENE CASU
+1 3 28 10 * /opt/fare/scripts/clearcache_operator.sh >> /var/log/fare/fare-worker/clearcache.log 2>&1
+1 3 31 3 * /opt/fare/scripts/clearcache_operator.sh >> /var/log/fare/fare-worker/clearcache.log 2>&1
+
+#CLEAN BUFF
+#0 11 * * * /opt/fare/scripts/clean_buff.sh >> /var/log/fare/fare-worker/cleanbuff.log 2>&1
+
+#RELOAD BINTABLE
+
+15 8 * * * /opt/binprov/binprov-worker/binfiles/prepare_bintable.py >> /var/log/binprov/binprov-worker/binreload.log 2>&1
+
+#REPORT AKTIVNICH TERMINALU
+
+10 10 1 * * /opt/fare/scripts/terminal_report.py >> /var/log/fare/fare-worker/terminal_report.log
+
+#TAPREGISTER, TAP, CLEARING CHECKS
+
+*/10 * * * * /opt/fare/scripts/check_tapsv2.py 2>&1
+*/10 * * * * /opt/fare/scripts/check_clearingv2.py 2>&1
+1 */8 * * * /opt/fare/scripts/kafka_check.py 2>&1
+0 11 * * * /opt/fare/scripts/brand_check.py 2>&1
+
+#SLACK REPORT
+0 9 * * * /opt/fare/scripts/slack_request.py
+
+#BKK DEBT DAILY REPORT
+0 9 * * * /opt/fare/scripts/bkk_report/bkk_debt_report_daily.py >> /opt/fare/scripts/bkk_report/bkkreport.log 2>&1
+0 9 * * * /opt/fare/scripts/bkk_report/bkk_authtx_report.py >> /opt/fare/scripts/bkk_report/bkkreport.log 2>&1
+
+#EFE DAILY REPORT
+
+0 10 * * * /opt/fare/scripts/efe_report/efe_daily_report_2.py >> /opt/fare/scripts/efe_report/efereport.log 2>&1
+0 10 * * * /opt/fare/scripts/efe_report/efe_refund.py >> /opt/fare/scripts/efe_report/efereport.log 2>&1
+
+#ACTIVE NODE CHECK
+*/5 * * * * /opt/fare/scripts/activenodes.py >> /tmp/node_check.log 2>&1
+
+#Switchio report
+30 8 1 * * /opt/fare/reporting/system_report.py 186 >> /var/log/fare/reporting.log
+
+#Switchio internal report
+53 8 1 * * /opt/fare/reporting/system_report_internal.py 186 >> /var/log/fare/reporting_internal.log
+54 8 1 * * /opt/fare/reporting/system_report_internal.py 4 >> /var/log/fare/reporting_internal.log
+55 8 1 * * /opt/fare/reporting/system_report_internal.py 5 >> /var/log/fare/reporting_internal.log
+56 8 1 * * /opt/fare/reporting/system_report_internal.py 6 >> /var/log/fare/reporting_internal.log
+57 8 1 * * /opt/fare/reporting/system_report_internal.py 7 >> /var/log/fare/reporting_internal.log
+58 8 1 * * /opt/fare/reporting/system_report_internal.py 23 >> /var/log/fare/reporting_internal.log
+59 8 1 * * /opt/fare/reporting/system_report_internal.py 29 >> /var/log/fare/reporting_internal.log
+01 9 1 * * /opt/fare/reporting/system_report_internal.py 180 >> /var/log/fare/reporting_internal.log
+
+#extra sonda report
+#38 13 5 * * /opt/fare/reporting/extra_csv_report.py >> /var/log/fare/extra_report.log
+
+#GC logs maintenance
+35 4 * * * /opt/gc_logs_maintenance.sh /var/log/fare/fare-worker/gc 14 183 1>/dev/null 2>&1
+
+#GC logs analyse
+#10 8 * * 1 python3 /opt/gceasy/gc_script.py /var/log/fare/fare-worker/gc 5bf07473-2042-45ca-8542-e7efee26fc5b
+
+#zabbix fare-worker log - too long script for nagios
+*/5 * * * *  /opt/nagios/plugins/check_fare_log2 -l /var/log/fare/fare-worker/worker.log -t 300
+
+
+#slack daily taps funny stuff
+0 9 * * * /opt/fare/scripts/slack_stats2.py
+
+
+#nagios keystore timeout - "dodo" solution
+* */12 * * * /opt/nagios/plugins/check_keystore_offline.sh -k /opt/fare/fare-worker/conf/SmartTransport.jks -p Monet+19 -w 30 -c 15
