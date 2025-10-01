@@ -1,0 +1,156 @@
+#!/usr/bin/python3.9
+import pymysql
+import sys
+import logging
+from datetime import datetime, timedelta
+
+critical_count = 1
+
+logfile = '/tmp/clearing_open_check.log'
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    level=logging.CRITICAL,
+                    handlers=[
+                        logging.FileHandler(logfile),
+                        logging.StreamHandler()
+                    ]
+)
+
+def check_clearing_stage():
+    connection = pymysql.connect(
+        host='pmydbtrans-vip01-spc',
+        user='mon_nagios',
+        password='nagmon@2019',
+        db='fare',
+        port=3306
+    )
+    cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+    cursor.execute("SELECT oper_id, code FROM operator WHERE entity_type = 'operator'")
+    operators = cursor.fetchall()
+
+    business_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    exit_status = 0
+    all_closed = True
+
+    for operator in operators:
+        oper_id = operator['oper_id']
+        code = operator['code']
+
+        cursor.execute("""
+            SELECT cld_id FROM clearing_day
+            WHERE oper_id = %s AND business_date = %s AND clearing_stage = 'Closed' and cld_id not like '%%PAYMENT%%'
+        """, (oper_id, business_date))
+        clearing_days = cursor.fetchall()
+
+        for clearing_day in clearing_days:
+            cld_id = clearing_day['cld_id']
+
+            cursor.execute("""
+                SELECT COUNT(*) as open_count
+                FROM clearing_item
+                WHERE clearing_day_id = %s AND clearing_stage = 'Open'
+            """, (cld_id,))
+            result = cursor.fetchone()
+            open_count = result['open_count']
+
+            if open_count >= critical_count:
+                logging.critical(f"Operator {code} ma Open: [{open_count}] items v uzavrenem clearing_day {cld_id}! pro BD: {business_date}")
+                exit_status = max(exit_status, 2)
+            else:
+                logging.info(f"OK: Operator {code}, nema zadne clearing_items ve stavu open pro clearing_day: {cld_id}.")
+    if all_closed:
+        logging.critical(f"Všechny clearing_items jsou CLOSED pro BD: {business_date}")
+
+
+    cursor.close()
+    connection.close()
+    sys.exit(exit_status)
+
+if __name__ == "__main__":
+    check_clearing_stage()
+
+#!/usr/bin/python3.9
+import pymysql
+import sys
+import logging
+from tabulate import tabulate
+
+# Nastavení loggingu
+logfile = '/tmp/check_temp_fail.log'
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    level=logging.ERROR,
+                    handlers=[
+                        logging.FileHandler(logfile),
+                        logging.StreamHandler()
+                    ]
+)
+
+def check_auth_tx_status():
+    # Pripojeni k databazi
+    connection = pymysql.connect(
+        host="pmydbtrans-vip01-spc",
+        user="mon_nagios",
+        password="nagmon@2019",
+        db="fare",
+        port=3306
+    )
+    cursor = connection.cursor(pymysql.cursors.DictCursor)
+    
+    logging.error(f"--------------------- SPOUSTIM CHECK ---------------------")
+    logging.error(f"---- PRO VICE INFA DB NEBO CHECK_TEMP_FAIL.PY SCRIPT ----")
+    logging.error(f"------ SCRIPT UKAZUJE VYSLEDKY ZA POSLEDNI 2 HODINY ------")
+    logging.error(f"----------------- DATA Z AUTH_TX TABULKY -----------------")
+    # Nacteni operatoru
+    cursor.execute("SELECT oper_id, code FROM operator where entity_type = 'operator'")
+    operators = cursor.fetchall()
+
+    exit_status = 0  # Defaultni stav OK
+
+    for operator in operators:
+        oper_id = operator['oper_id']
+        query = """
+            SELECT
+                resp_code,
+                GROUP_CONCAT(DISTINCT LEFT(resp_message, 100)) AS resp_messages,
+                GROUP_CONCAT(DISTINCT resp_core) AS resp_cores,
+                COUNT(*) AS count
+            FROM auth_tx
+            WHERE resp_type = 'TEMP_FAIL'
+              AND timestmp >= NOW() - INTERVAL 2 HOUR
+              AND oper_id = %s
+            GROUP BY resp_code;
+        """
+
+        cursor.execute(query, (oper_id,))
+        results = cursor.fetchall()
+
+        if results:
+            logging.info(f"Kontrola pro operatora {operator['code']}:")
+
+            for row in results:
+                resp_code = row['resp_code']
+                resp_messages = row['resp_messages']
+                resp_cores = row['resp_cores']
+                result_count = row['count']
+
+                # Vypis vysledku tabulky
+                #logging.info(f"Resp_code: {resp_code}, Resp_messages: {resp_messages}, Resp_cores: {resp_cores}, Result_count: {result_count}")
+
+                # Kontrola, zda je count > 10
+                if result_count > 10:
+                    logging.error(f"Error: Operator {operator['code']} ma [{result_count}] TEMP_FAILU pro resp_code {resp_code}.")
+                    # Vypis vysledku jako tabulku
+                    #table = tabulate(results, headers="keys", tablefmt="grid")
+                    #logging.info(f"Tabulka vysledku:\n{table}")
+                    #exit_status = max(exit_status, 2)  # Exit status 2 pro error
+        else:
+            logging.info(f"OK: Operator {operator['code']} nema TEMP_FAIL zaznamy za posledni 2 hodiny.")
+
+    cursor.close()
+    connection.close()
+
+    sys.exit(exit_status)
+
+if __name__ == "__main__":
+    check_auth_tx_status()
+
