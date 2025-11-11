@@ -148,7 +148,8 @@ class Operator:
 #        inproc2 = []
         if (self.isenabled is True) and self.opertype is not None and (self.from_hour < datetime.now() < self.to_hour):
             query_type = f"SELECT oper_id,code FROM operator WHERE type = '{self.opertype}'"
-            query_clients = DbOperation(sqlengine).exec_query('operator', query_type)
+            db_op = DbOperation(sqlengine)
+            query_clients = db_op.exec_query('operator', query_type)
             clients = query_clients.fetchall()
             nagios1 = []
             nagios2 = []
@@ -160,7 +161,7 @@ class Operator:
                 operator_id = row[0]
                 operator_code = row[1]
                 query_type2 = f"select clearing_stage from fare.clearing_day where oper_id = {operator_id} and business_date = '{self.business_day}' and cld_id not like '%PAYMENT%'"
-                clients2 = DbOperation(sqlengine).exec_query('clearing_day', query_type2)
+                clients2 = db_op.exec_query('clearing_day', query_type2)
                 owy = clients2.fetchall()
                 try:
                    stage = owy[0][0]
@@ -182,7 +183,7 @@ class Operator:
                     #logger.critical(f"Operator {operator_code} ma clearing v nevalidním stavu {stage}, za BD {self.business_day}...")
                     #Path(f'{notify_folder}{operator_code}_clearing_in_state_{stage}').touch(mode=0o644, exist_ok=True)
                 query_pay = f"select clearing_stage from fare.clearing_day where oper_id = {operator_id} and business_date = '{self.business_day}' and cld_id like '%PAYMENT%'"
-                query_res_pay = DbOperation(sqlengine).exec_query('clearing_day', query_pay)
+                query_res_pay = db_op.exec_query('clearing_day', query_pay)
                 ResultSet = query_res_pay.fetchone()
                 stage_pay = ResultSet[0] if ResultSet is not None else None
                 if (stage_pay == 'InProcess'):
@@ -202,6 +203,7 @@ class Operator:
                     self.clearing_ok = False
                     #logger.critical(f"Operator {operator_code} ma payment v nevalidním stavu {stage_pay}, za BD {self.business_day}...")
                     #Path(f'{notify_folder}{operator_code}_payment_in_state_{stage_pay}').touch(mode=0o644, exist_ok=True)
+            db_op.connection.close()
             return nagios1, tosend1, nagios2, tosend2
         elif (self.opertype is not None) and (datetime.now() > self.to_hour or datetime.now() < self.from_hour):
             return nagios1, tosend1, nagios2, tosend2
@@ -212,11 +214,13 @@ class Operator:
         tosend1 = []
         tosend2 = []
         failed = []
+        problem = []
 #        inproc1 = []
 #        inproc2 = []
         if (self.isenabled is True) and self.operid is not None and (self.from_hour < datetime.now() < self.to_hour):
             query = f"select clearing_stage from fare.clearing_day where oper_id = {self.operid} and business_date = '{self.business_day}' and cld_id not like '%PAYMENT%'"
-            query_res = DbOperation(sqlengine).exec_query('clearing_day', query)
+            db_op = DbOperation(sqlengine)
+            query_res = db_op.exec_query('clearing_day', query)
             ResultSet = query_res.fetchone()
             stage = ResultSet[0] if ResultSet is not None else None
             if  (stage == 'Open'):
@@ -241,7 +245,7 @@ class Operator:
                 #logger.critical(f"Operator {self.opercode} ma clearing v nevalidním stavu {stage}, za BD {self.business_day}...")
                 #Path(f'{notify_folder}{self.opercode}_clearing_in_state_{stage}').touch(mode=0o644, exist_ok=True)
             query_pay = f"select clearing_stage from fare.clearing_day where oper_id = {self.operid} and business_date = '{self.business_day}' and cld_id like '%PAYMENT%'"
-            query_res_pay = DbOperation(sqlengine).exec_query('clearing_day', query_pay)
+            query_res_pay = db_op.exec_query('clearing_day', query_pay)
             ResultSet = query_res_pay.fetchone()
             stage_pay = ResultSet[0] if ResultSet is not None else None
             if (stage_pay == 'InProcess'):
@@ -252,6 +256,9 @@ class Operator:
                 tosend2.append(self.opercode)
                 if self.opercode == 'BKK':
                     failed.append(self.opercode)
+            elif stage_pay == 'Problem':
+                if self.opercode == 'KAUNAS':
+                    problem.append(self.opercode)
             elif (stage_pay == 'Failed'):
                 failed.append(self.opercode)
                 #logger.warn(f"Operator {self.opercode} ma payment ve stavu {stage_pay}, za BD {self.business_day}...")
@@ -263,7 +270,8 @@ class Operator:
                 self.clearing_ok = False
                 #logger.critical(f"Operator {self.opercode} ma payment v nevalidním stavu {stage_pay}, za BD {self.business_day}...")
                 #Path(f'{notify_folder}{self.opercode}_payment_in_state_{stage_pay}').touch(mode=0o644, exist_ok=True)
-            return clearing, tosend1, payment, tosend2, failed
+            db_op.connection.close()
+            return clearing, tosend1, payment, tosend2, failed, problem
         elif (self.opertype is not None):
             pass
             #logger.warn(f"{self.opercode} CLIENTS SUCCESSFULLY CHECKED")
@@ -279,10 +287,12 @@ class Operator:
             return
         active_clearing_has_run = True
         query_type = f"SELECT code FROM operator WHERE oper_id IN (SELECT oper_id from clearing_day where clearing_stage = 'InProcess' and business_date = '{self.business_day}' and cld_id not like '%PAYMENT%')"
-        query_clients = DbOperation(sqlengine).exec_query('operator', query_type)
+        db_op = DbOperation(sqlengine)
+        query_clients = db_op.exec_query('operator', query_type)
         clients = [row[0] for row in query_clients.fetchall()]
         query_type2 = f"SELECT code FROM operator WHERE oper_id IN (SELECT oper_id from clearing_day where clearing_stage = 'InProcess' and business_date = '{self.business_day}' and cld_id like '%PAYMENT%')"
-        query_clients2 = DbOperation(sqlengine).exec_query('operator', query_type2)
+        query_clients2 = db_op.exec_query('operator', query_type2)
+        db_op.connection.close()
         clients2 = [row[0] for row in query_clients2.fetchall()]
         return clients, clients2
 
@@ -292,6 +302,7 @@ tosend1 = []
 payment = []
 tosend2 = []
 failed = []
+problem = []
 #inproc1 = []
 #inproc2 = []
 for o in operators:
@@ -302,12 +313,13 @@ for o in operators:
         amc1, asnd1, amc2, asnd2 = amc
     res = operator_check.get_data()
     if res is not None:
-        clr, tsnd1, pay, tsnd2, fail = res
+        clr, tsnd1, pay, tsnd2, fail, probl = res
         clearing.extend(clr)
         tosend1.extend(tsnd1)
         payment.extend(pay)
         tosend2.extend(tsnd2)
         failed.extend(fail)
+        problem.extend(probl)
     run = operator_check.active_clearing()
     if run is not None:
         clients, clients2 = run
@@ -343,6 +355,12 @@ if len(failed) > 0:
     nagios_result.append(1)
     nglogger.critical(f'PAYMENT pro operatory s kodem {failed} je ve stavu FAILED!')
     logger.critical(f'PAYMENT pro operatory s kodem {failed} je ve stavu FAILED!')
+    print("")
+
+if len(problem) > 0:
+    nagios_result.append(1)
+    nglogger.critical(f'PAYMENT pro operatory s kodem {problem} je ve stavu PROBLEM! 1st_lvl zalozi task na KAUNAS s tim, ze evidujeme problem v paymentu a zaroven nagios/zabbix jiru preda na 2st_lvl hotline vyresi se rano - NEMUSI SE KVULI TOMU VOLAT!')
+    logger.critical(f'PAYMENT pro operatory s kodem {problem} je ve stavu PROBLEM! 1st_lvl zalozi task na KAUNAS s tim, ze evidujeme problem v paymentu a zaroven nagios/zabbix jiru preda na 2st_lvl hotline vyresi se rano - NEMUSI SE KVULI TOMU VOLAT!')
     print("")
 
 if (len(merged_list) == 0) or (len(merged_list) is None):

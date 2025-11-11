@@ -76,14 +76,14 @@ df.to_csv(f'/opt/fare/scripts/bkk_report/files/csv_export_bkk_debt_{reportdate}.
 from_addr = 'no-reply@switchio.com'
 #to_addr = 'msmejkal@monetplus.cz'
 to_addr = 'zsuzsanna.timar@bkk.hu'
-cc_addr = ['jhruby@monetplus.cz','monika.falusi@bkk.hu','natalia.szebenyi@bkk.hu','abigel.terkan@bkk.hu','mholomek@monetplus.cz','Noemi.Csetneky@kh.hu','POS_settlement@kh.hu','ldarebnik@monetplus.cz']
+cc_addr = ['jhruby@monetplus.cz','monika.falusi@bkk.hu','natalia.szebenyi@bkk.hu','abigel.terkan@bkk.hu','mholomek@monetplus.cz','Noemi.Csetneky@kh.hu','POS_settlement@kh.hu','ldarebnik@monetplus.cz','dorottya.fonyodi@bkk.hu']
 subject = f'Production debt report for the BKK operator {reportdate}'
 content = f'''<html>
 <head></head>
 <body>
 <p>Hello,</p>
 <p>Attached you can find the report with the list of tokens on the Denylist and the total amount of money in debt as of {reportdate}.</p>
-<p>Best regards,</p> 
+<p>Best regards,</p> 
 <p>Switchio Team</p>
 <img src="cid:logo">
 </body>

@@ -41,7 +41,7 @@ content = f'''<html>
 <body>
 <p>Hello,</p>
 <p>Attached you can find the log.</p>
-<p>Best regards,</p>
+<p>Best regards,</p> 
 <p>Switchio Team</p>
 </body>
 </html>'''

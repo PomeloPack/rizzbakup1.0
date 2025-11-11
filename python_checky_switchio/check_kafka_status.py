@@ -30,9 +30,9 @@ def mysqlconnect():
     try:
         # Connect to MySQL database
         conn = pymysql.connect(
-            host='pmydbtrans-vip01-spc',
-            user='app_fare',
-            password='fare@2016',
+            host='aa',
+            user='aa',
+            password='aa',
             database='fare'
         )
 
