@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s -  %(message)s', level=l
 
 user = subprocess.getoutput("whoami")
 
-slack_webhook_url = 'https://hooks.slack.com/services/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'
+slack_webhook_url = 'https://hooks.slack.com/services/webhookzde'
 
 payload = {
     "channel": "#transport_acc_check",

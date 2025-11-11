@@ -31,7 +31,7 @@ proxy = {
     'https': 'http://10.5.20.110:3128'
 }
 
-slack_webhook_url = 'https://hooks.slack.com/services/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'
+slack_webhook_url = 'https://hooks.slack.com/services/webhoodzde'
 
 payload = {
     "channel": "#transport_team",
