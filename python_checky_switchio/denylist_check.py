@@ -42,9 +42,6 @@ cur_fare = conn_fare.cursor(pymysql.cursors.DictCursor)
 cur_fare.execute("SELECT oper_id, code FROM operator WHERE entity_type = 'operator'")
 operators = cur_fare.fetchall()
 
-cur_fare.execute("SELECT oper_id, code FROM operator WHERE entity_type = 'operator'")
-operators = cur_fare.fetchall()
-
 exit_status = 0
 
 for operator in operators:
@@ -52,17 +49,19 @@ for operator in operators:
     oper_code = operator["code"]
 
     for list_name, table in [("LEGACY", "stoplist_ver"), ("DAVE", "denylist_entries")]:
-        cursor = conn_denylist.cursor(pymysql.cursors.DictCursor)
+        cursor = conn_fare.cursor(pymysql.cursors.DictCursor)
 
-        query = """
+        # Assuming 'action' is the column for the action type, 'oper_id' is directly in the table,
+        # and 'created_at' is the timestamp column. Adjust if your schema differs.
+        query = f"""
             SELECT
-                action,          -- FILL IN: real column name for the action type
+                action,
                 COUNT(*) AS cnt
             FROM {table}
-            WHERE oper_id = %s   -- FILL IN: is oper_id directly here or joined via terminal?
-              AND created_at >= NOW() - INTERVAL 2 HOUR  -- FILL IN: real timestamp column name
+            WHERE oper_id = %s
+              AND created_at >= NOW() - INTERVAL 2 HOUR
             GROUP BY action
-        """.format(table=table)
+        """
 
         cursor.execute(query, (oper_id,))
         rows = cursor.fetchall()
@@ -74,7 +73,7 @@ for operator in operators:
 
         table_data = []
         for row in rows:
-            action_code = row["action"]   # FILL IN: real column name
+            action_code = row["action"]
             cnt         = row["cnt"]
             action_name = ACTION_NAMES.get(action_code, f"UNKNOWN({action_code})")
 
