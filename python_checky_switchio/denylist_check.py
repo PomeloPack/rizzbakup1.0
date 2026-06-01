@@ -48,9 +48,9 @@ DENYLIST_SOURCES = [
 
 def check_denylist_status() -> None:
     conn = pymysql.connect(
-        host="pmydbtrans-vip01-spc",
-        user="mon_nagios",
-        password="nagmon@2019",
+        host="-vip01-spc",
+        user="",
+        password="@2019",
         db="fare",
         port=3306
     )
