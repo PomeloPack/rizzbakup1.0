@@ -48,11 +48,11 @@ DENYLIST_SOURCES = [
 
 def check_denylist_status() -> None:
     conn = pymysql.connect(
-        host="YOUR_HOST",    # <-- fill in
-        user="nagios",
-        password="@2019",
-        db="YOUR_DB",        # <-- fill in
-        port=3306,
+        host="pmydbtrans-vip01-spc",
+        user="mon_nagios",
+        password="nagmon@2019",
+        db="fare",
+        port=3306
     )
 
     cur = conn.cursor(pymysql.cursors.DictCursor)
@@ -73,9 +73,9 @@ def check_denylist_status() -> None:
             action_col  = source["action_col"]
             time_col    = source["time_col"]
 
-            cursor = conn_denylist.cursor(pymysql.cursors.DictCursor)
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
             query = f"""
-                SELECT {oper_col} AS oper_id, {action_col} AS action, COUNT(*) AS cnt
+                SELECT {oper_col} AS oper_id, {action_col} AS action, COUNT(*) AS count
                 FROM {table}
                 WHERE {oper_col} = %s
                   AND {time_col} >= NOW() - INTERVAL 2 HOUR
@@ -92,7 +92,7 @@ def check_denylist_status() -> None:
             table_data = []
             for row in rows:
                 action_code = row["action"]
-                cnt         = row["cnt"]
+                count       = row["count"]
                 action_name = ACTION_NAMES.get(action_code, f"UNKNOWN({action_code})")
 
                 row["action"] = action_name  # replace int with label for tabulate
@@ -100,17 +100,17 @@ def check_denylist_status() -> None:
 
                 thresholds = ALERT_THRESHOLDS.get(action_name)
                 if not thresholds:
-                    logging.info(f"[{list_name}] Operator {oper_code} | {action_name}: {cnt} (no threshold configured)")
+                    logging.info(f"[{list_name}] Operator {oper_code} | {action_name}: {count} (no threshold configured)")
                     continue
 
-                if cnt >= thresholds["critical"]:
-                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} | {action_name}: {cnt} >= {thresholds['critical']}")
+                if count >= thresholds["critical"]:
+                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} | {action_name}: {count} >= {thresholds['critical']}")
                     exit_status = max(exit_status, 2)
-                elif cnt >= thresholds["warning"]:
-                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} | {action_name}: {cnt} >= {thresholds['warning']}")
+                elif count >= thresholds["warning"]:
+                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} | {action_name}: {count} >= {thresholds['warning']}")
                     exit_status = max(exit_status, 1)
                 else:
-                    logging.info(f"OK:       [{list_name}] Operator {oper_code} | {action_name}: {cnt}")
+                    logging.info(f"OK:       [{list_name}] Operator {oper_code} | {action_name}: {count}")
 
             if table_data:
                 summary = tabulate(table_data, headers="keys", tablefmt="grid")
