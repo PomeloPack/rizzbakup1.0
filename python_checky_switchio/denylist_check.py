@@ -26,6 +26,7 @@ ALERT_THRESHOLDS = {
     "ADD":    {"warning": 20,  "critical": 100},
     "REMOVE": {"warning": 20,  "critical": 100},
     "NOTIFY": {"warning": 20,  "critical": 100},
+    "ADD_PERCENTAGE": {"warning": 20, "critical": 50}, # Example thresholds for ADD percentage
 }
 
 # --- Operators that are inactive but still on production, to be skipped ---
@@ -142,10 +143,14 @@ def check_denylist_status() -> None:
                 continue
 
             table_data = []
+            add_count_for_source = 0
             for row in rows:
                 action_code = row["action"]
                 count       = row["count"]
                 action_name = ACTION_NAMES.get(action_code, f"UNKNOWN({action_code})")
+
+                if action_name == "ADD":
+                    add_count_for_source += count
 
                 row["action"] = action_name
                 table_data.append(row)
@@ -160,10 +165,26 @@ def check_denylist_status() -> None:
                 elif count >= thresholds["warning"]:
                     exit_status = max(exit_status, 1)
                 # No specific logging for OK status if summary table will be printed
+            
+            # Calculate percentage of ADD actions vs total taps
+            if total_taps > 0 and add_count_for_source > 0:
+                add_percentage = (add_count_for_source / total_taps) * 100
+                table_data.append({
+                    "oper_id": oper_id,
+                    "action": "ADD_VS_TAPS_PCT",
+                    "count": f"{add_percentage:.2f}%"
+                })
+
+                percentage_thresholds = ALERT_THRESHOLDS.get("ADD_PERCENTAGE")
+                if percentage_thresholds:
+                    if add_percentage >= percentage_thresholds["critical"]:
+                        exit_status = max(exit_status, 2)
+                    elif add_percentage >= percentage_thresholds["warning"]:
+                        exit_status = max(exit_status, 1)
 
             if table_data:
                 summary = tabulate(table_data, headers="keys", tablefmt="grid")
-                # Log critical status only if overall exit_status is critical
+                # Log status based on the highest exit_status encountered
                 if exit_status == 2:
                     logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} summary:\n{summary}")
                 elif exit_status == 1:
