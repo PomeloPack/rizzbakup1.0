@@ -22,10 +22,10 @@ ACTION_NAMES = {
 
 # --- Thresholds per action ---
 ALERT_THRESHOLDS = {
-    "KEEP":   {"warning": 50,  "critical": 200},
-    "ADD":    {"warning": 20,  "critical": 100},
-    "REMOVE": {"warning": 20,  "critical": 100},
-    "NOTIFY": {"warning": 20,  "critical": 100},
+    #"KEEP":   {"warning": 50,  "critical": 200},
+    #"ADD":    {"warning": 20,  "critical": 100},
+    #"REMOVE": {"warning": 20,  "critical": 100},
+    #"NOTIFY": {"warning": 20,  "critical": 100},
     "PERCENTAGE": {"warning": 25,  "critical": 50},
 }
 
