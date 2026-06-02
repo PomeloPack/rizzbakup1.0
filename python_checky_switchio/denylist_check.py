@@ -28,6 +28,12 @@ ALERT_THRESHOLDS = {
     "NOTIFY": {"warning": 20,  "critical": 100},
 }
 
+# --- Operators that are inactive but still on production, to be skipped ---
+INACTIVE_OPERATORS = [
+    "EPURSELG", # Example inactive operator code
+    # Add other inactive operator codes here
+]
+
 # --- Denylist source definitions ---
 DENYLIST_SOURCES = [
     {
@@ -70,6 +76,9 @@ def check_denylist_status() -> None:
         oper_id   = operator["oper_id"]
         oper_code = operator["code"]
 
+        if oper_code in INACTIVE_OPERATORS:
+            logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) is in INACTIVE_OPERATORS list. Skipping denylist checks.")
+            continue
         
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
         prop_query = """
