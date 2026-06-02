@@ -12,7 +12,7 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
 )
 
-# --- Action code mapping ---
+# info z denylistu
 ACTION_NAMES = {
     0: "KEEP",
     1: "ADD",
@@ -20,7 +20,7 @@ ACTION_NAMES = {
     3: "NOTIFY",
 }
 
-# --- Thresholds per action ---
+# budeme hlidat jen podle procenta tokenu pridanych na DL
 ALERT_THRESHOLDS = {
     #"KEEP":   {"warning": 50,  "critical": 200},
     #"ADD":    {"warning": 20,  "critical": 100},
@@ -37,7 +37,7 @@ INACTIVE_OPERATORS = [
         "ZTMTYCHY"
     ]
 
-# --- Denylist source definitions ---
+# dl definice
 DENYLIST_SOURCES = [
     {
         "name":       "LEGACY",
@@ -186,7 +186,7 @@ def check_denylist_status() -> None:
 
             if table_data:                                                                                                                                                           
                 summary = tabulate(table_data, headers="keys", tablefmt="grid")                                                                                                                                                             
-                # Log critical status only if overall exit_status is critical                                                                                                                                                               
+                                                                                                                                                                               
                 if source_status == 2:                                                                                                                                                                                                        
                     logging.critical(f"[{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                   
                 elif source_status == 1:                                                                                                                                                                                                      
