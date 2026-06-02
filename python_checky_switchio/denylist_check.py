@@ -130,21 +130,24 @@ def check_denylist_status() -> None:
 
                 thresholds = ALERT_THRESHOLDS.get(action_name)
                 if not thresholds:
-                    logging.info(f"[{list_name}] Operator {oper_code} | {action_name}: {count} (no threshold configured)")
+                    # No threshold configured, only add to table_data
                     continue
 
                 if count >= thresholds["critical"]:
-                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} | {action_name}: {count} >= {thresholds['critical']}")
                     exit_status = max(exit_status, 2)
                 elif count >= thresholds["warning"]:
-                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} | {action_name}: {count} >= {thresholds['warning']}")
                     exit_status = max(exit_status, 1)
-                else:
-                    logging.info(f"OK:       [{list_name}] Operator {oper_code} | {action_name}: {count}")
+                # No specific logging for OK status if summary table will be printed
 
             if table_data:
                 summary = tabulate(table_data, headers="keys", tablefmt="grid")
-                logging.info(f"[{list_name}] Operator {oper_code} summary:\n{summary}")
+                # Log critical status only if overall exit_status is critical
+                if exit_status == 2:
+                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} summary:\n{summary}")
+                elif exit_status == 1:
+                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} summary:\n{summary}")
+                else:
+                    logging.info(f"OK:       [{list_name}] Operator {oper_code} summary:\n{summary}")
 
             cursor.close()
 
