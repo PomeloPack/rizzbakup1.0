@@ -26,14 +26,16 @@ ALERT_THRESHOLDS = {
     "ADD":    {"warning": 20,  "critical": 100},
     "REMOVE": {"warning": 20,  "critical": 100},
     "NOTIFY": {"warning": 20,  "critical": 100},
-    "ADD_PERCENTAGE": {"warning": 20, "critical": 50}, # Example thresholds for ADD percentage
+    "PERCENTAGE": {"warning": 40, "critical": 50}
 }
 
-# --- Operators that are inactive but still on production, to be skipped ---
 INACTIVE_OPERATORS = [
-    "EPURSELG", # Example inactive operator code
-    # Add other inactive operator codes here
-]
+        "KLAGENFURT",
+        "ARAD",
+        "SANTDCHBUS",
+        "EPURSELG",
+        "ZTMTYCHY"
+    ]
 
 # --- Denylist source definitions ---
 DENYLIST_SOURCES = [
@@ -59,9 +61,9 @@ DENYLIST_SOURCES = [
 
 def check_denylist_status() -> None:
     conn = pymysql.connect(
-        host="-vip01-spc",
-        user="",
-        password="@2019",
+        host="host_test",
+        user="user_test",
+        password="user_heslo",
         db="fare",
         port=3306
     )
@@ -78,14 +80,12 @@ def check_denylist_status() -> None:
         oper_code = operator["code"]
 
         if oper_code in INACTIVE_OPERATORS:
-            logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) is in INACTIVE_OPERATORS list. Skipping denylist checks.")
             continue
-
-        # Get total taps for the operator in the last 2 hours
+        
         tap_cursor = conn.cursor(pymysql.cursors.DictCursor)
         tap_query = """
             SELECT COUNT(*) AS total_taps FROM tap
-            WHERE oper_id = %s AND registered = 1 AND dttm_created >= NOW() - INTERVAL 2 HOUR
+            WHERE oper_id = %s AND registered = 1 AND server_dttm >= NOW() - INTERVAL 2 HOUR
         """
         tap_cursor.execute(tap_query, (oper_id,))
         tap_count_result = tap_cursor.fetchone()
@@ -93,7 +93,8 @@ def check_denylist_status() -> None:
         
         total_taps = tap_count_result['total_taps'] if tap_count_result else 0
         logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
-        
+
+
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
         prop_query = """
             SELECT value FROM operator_property
@@ -116,6 +117,8 @@ def check_denylist_status() -> None:
             
             if stoplist_engine_value != operator_stoplist_engine:
                 continue
+            
+            add_count_for_source = 0
 
             table                   = source["table"]
             table_alias             = source["table_alias"]
@@ -143,12 +146,11 @@ def check_denylist_status() -> None:
                 continue
 
             table_data = []
-            add_count_for_source = 0
             for row in rows:
                 action_code = row["action"]
                 count       = row["count"]
                 action_name = ACTION_NAMES.get(action_code, f"UNKNOWN({action_code})")
-
+                
                 if action_name == "ADD":
                     add_count_for_source += count
 
@@ -157,39 +159,36 @@ def check_denylist_status() -> None:
 
                 thresholds = ALERT_THRESHOLDS.get(action_name)
                 if not thresholds:
-                    # No threshold configured, only add to table_data
                     continue
 
-                if count >= thresholds["critical"]:
+                if count >= thresholds["critical"]:                                                        
                     exit_status = max(exit_status, 2)
                 elif count >= thresholds["warning"]:
                     exit_status = max(exit_status, 1)
-                # No specific logging for OK status if summary table will be printed
-            
-            # Calculate percentage of ADD actions vs total taps
+
             if total_taps > 0 and add_count_for_source > 0:
                 add_percentage = (add_count_for_source / total_taps) * 100
                 table_data.append({
-                    "oper_id": oper_id,
+                    "oper_id": "oper_id",
                     "action": "ADD_VS_TAPS_PCT",
                     "count": f"{add_percentage:.2f}%"
                 })
 
-                percentage_thresholds = ALERT_THRESHOLDS.get("ADD_PERCENTAGE")
+                percentage_thresholds = ALERT_THRESHOLDS.get("PERCENTAGE")
                 if percentage_thresholds:
                     if add_percentage >= percentage_thresholds["critical"]:
                         exit_status = max(exit_status, 2)
                     elif add_percentage >= percentage_thresholds["warning"]:
                         exit_status = max(exit_status, 1)
-
-            if table_data:
-                summary = tabulate(table_data, headers="keys", tablefmt="grid")
-                # Log status based on the highest exit_status encountered
-                if exit_status == 2:
-                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} summary:\n{summary}")
-                elif exit_status == 1:
-                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} summary:\n{summary}")
-                else:
+                                                                                                                                                                                                                                            
+            if table_data:                                                                                                                                                           
+                summary = tabulate(table_data, headers="keys", tablefmt="grid")                                                                                                                                                             
+                # Log critical status only if overall exit_status is critical                                                                                                                                                               
+                if exit_status == 2:                                                                                                                                                                                                        
+                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                   
+                elif exit_status == 1:                                                                                                                                                                                                      
+                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                    
+                else:                                                                                                                                                                                                                       
                     logging.info(f"OK:       [{list_name}] Operator {oper_code} summary:\n{summary}")
 
             cursor.close()
