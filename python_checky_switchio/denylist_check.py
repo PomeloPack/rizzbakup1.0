@@ -33,16 +33,20 @@ DENYLIST_SOURCES = [
     {
         "name":       "LEGACY",
         "table":      "stoplist_inc",
+        "table_alias": "si",
         "oper_col":   "oper_id",
         "action_col": "type",
         "time_col":   "dttm",
+        "stoplist_engine_value": "BINARY",
     },
     {
         "name":       "DAVELIST",
         "table":      "denylist_entries",
+        "table_alias": "de",
         "oper_col":   "operator_id",
         "action_col": "action",
         "time_col":   "created_time",
+        "stoplist_engine_value": "DAVE_LIST",
     },
 ]
 
@@ -67,21 +71,26 @@ def check_denylist_status() -> None:
         oper_code = operator["code"]
 
         for source in DENYLIST_SOURCES:
-            list_name   = source["name"]
-            table       = source["table"]
-            oper_col    = source["oper_col"]
-            action_col  = source["action_col"]
-            time_col    = source["time_col"]
+            list_name               = source["name"]
+            table                   = source["table"]
+            table_alias             = source["table_alias"]
+            oper_col                = source["oper_col"]
+            action_col              = source["action_col"]
+            time_col                = source["time_col"]
+            stoplist_engine_value   = source["stoplist_engine_value"]
 
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             query = f"""
-                SELECT {oper_col} AS oper_id, {action_col} AS action, COUNT(*) AS count
-                FROM {table}
-                WHERE {oper_col} = %s
-                  AND {time_col} >= NOW() - INTERVAL 2 HOUR
-                GROUP BY {oper_col}, {action_col}
+                SELECT {table_alias}.{oper_col} AS oper_id, {table_alias}.{action_col} AS action, COUNT(*) AS count
+                FROM {table} {table_alias}
+                JOIN operator_property op ON {table_alias}.{oper_col} = op.operator_id
+                WHERE {table_alias}.{oper_col} = %s
+                  AND {table_alias}.{time_col} >= NOW() - INTERVAL 2 HOUR
+                  AND op.property_key = 'STOPLIST_ENGINE'
+                  AND op.value = %s
+                GROUP BY {table_alias}.{oper_col}, {table_alias}.{action_col}
             """
-            cursor.execute(query, (oper_id,))
+            cursor.execute(query, (oper_id, stoplist_engine_value))
             rows = cursor.fetchall()
 
             if not rows:
