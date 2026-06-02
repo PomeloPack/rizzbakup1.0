@@ -79,6 +79,19 @@ def check_denylist_status() -> None:
         if oper_code in INACTIVE_OPERATORS:
             logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) is in INACTIVE_OPERATORS list. Skipping denylist checks.")
             continue
+
+        # Get total taps for the operator in the last 2 hours
+        tap_cursor = conn.cursor(pymysql.cursors.DictCursor)
+        tap_query = """
+            SELECT COUNT(*) AS total_taps FROM tap
+            WHERE oper_id = %s AND registered = 1 AND dttm_created >= NOW() - INTERVAL 2 HOUR
+        """
+        tap_cursor.execute(tap_query, (oper_id,))
+        tap_count_result = tap_cursor.fetchone()
+        tap_cursor.close()
+        
+        total_taps = tap_count_result['total_taps'] if tap_count_result else 0
+        logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
         
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
         prop_query = """
