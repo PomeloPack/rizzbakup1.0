@@ -92,7 +92,6 @@ def check_denylist_status() -> None:
 
             # Only process this source if its engine value matches the operator's configured engine
             if stoplist_engine_value != operator_stoplist_engine:
-                logging.info(f"INFO:    [{list_name}] Operator {oper_code} (ID: {oper_id}) - skipping as operator's STOPLIST_ENGINE '{operator_stoplist_engine}' does not match source's '{stoplist_engine_value}'")
                 continue # Skip to the next source
 
             table                   = source["table"]
