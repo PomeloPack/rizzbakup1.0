@@ -70,14 +70,36 @@ def check_denylist_status() -> None:
         oper_id   = operator["oper_id"]
         oper_code = operator["code"]
 
+        # Get the STOPLIST_ENGINE property for the current operator
+        prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
+        prop_query = """
+            SELECT value FROM operator_property
+            WHERE operator_id = %s AND property_key = 'STOPLIST_ENGINE'
+        """
+        prop_cursor.execute(prop_query, (oper_id,))
+        operator_stoplist_engine_prop = prop_cursor.fetchone()
+        prop_cursor.close()
+
+        if not operator_stoplist_engine_prop:
+            logging.warning(f"WARNING: Operator {oper_code} (ID: {oper_id}) has no 'STOPLIST_ENGINE' property. Skipping all denylist checks for this operator.")
+            continue # Skip this operator if no STOPLIST_ENGINE property is found
+
+        operator_stoplist_engine = operator_stoplist_engine_prop['value']
+
         for source in DENYLIST_SOURCES:
             list_name               = source["name"]
+            stoplist_engine_value   = source["stoplist_engine_value"]
+
+            # Only process this source if its engine value matches the operator's configured engine
+            if stoplist_engine_value != operator_stoplist_engine:
+                logging.info(f"INFO:    [{list_name}] Operator {oper_code} (ID: {oper_id}) - skipping as operator's STOPLIST_ENGINE '{operator_stoplist_engine}' does not match source's '{stoplist_engine_value}'")
+                continue # Skip to the next source
+
             table                   = source["table"]
             table_alias             = source["table_alias"]
             oper_col                = source["oper_col"]
             action_col              = source["action_col"]
             time_col                = source["time_col"]
-            stoplist_engine_value   = source["stoplist_engine_value"]
 
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             query = f"""
