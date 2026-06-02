@@ -26,7 +26,7 @@ ALERT_THRESHOLDS = {
     "ADD":    {"warning": 20,  "critical": 100},
     "REMOVE": {"warning": 20,  "critical": 100},
     "NOTIFY": {"warning": 20,  "critical": 100},
-    "PERCENTAGE": {"warning": 40, "critical": 50}
+    "PERCENTAGE": {"warning": 25,  "critical": 50},
 }
 
 INACTIVE_OPERATORS = [
@@ -61,9 +61,9 @@ DENYLIST_SOURCES = [
 
 def check_denylist_status() -> None:
     conn = pymysql.connect(
-        host="host_test",
-        user="user_test",
-        password="user_heslo",
+        host="",
+        user="",
+        password="",
         db="fare",
         port=3306
     )
@@ -92,7 +92,7 @@ def check_denylist_status() -> None:
         tap_cursor.close()
         
         total_taps = tap_count_result['total_taps'] if tap_count_result else 0
-        logging.info(f"INFO:    Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
+        logging.info(f"Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
 
 
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -105,7 +105,7 @@ def check_denylist_status() -> None:
         prop_cursor.close()
 
         if not operator_stoplist_engine_prop:
-            logging.warning(f"WARNING: Operator {oper_code} (ID: {oper_id}) has no 'STOPLIST_ENGINE' property. Skipping all denylist checks for this operator.")
+            logging.warning(f"Operator {oper_code} (ID: {oper_id}) has no 'STOPLIST_ENGINE' property. Skipping all denylist checks for this operator.")
             continue
 
         operator_stoplist_engine = operator_stoplist_engine_prop['value']
@@ -119,6 +119,7 @@ def check_denylist_status() -> None:
                 continue
             
             add_count_for_source = 0
+            source_status = 0
 
             table                   = source["table"]
             table_alias             = source["table_alias"]
@@ -140,8 +141,8 @@ def check_denylist_status() -> None:
             cursor.execute(query, (oper_id, stoplist_engine_value))
             rows = cursor.fetchall()
 
-            if not rows:
-                logging.info(f"OK: [{list_name}] Operator {oper_code} - no denylist activity in last 2 hours")
+            if not  rows:
+                logging.warning(f"[{list_name}] Operator {oper_code} - no denylist activity in last 2 hours")
                 cursor.close()
                 continue
 
@@ -162,34 +163,36 @@ def check_denylist_status() -> None:
                     continue
 
                 if count >= thresholds["critical"]:                                                        
-                    exit_status = max(exit_status, 2)
+                    source_status = max(source_status, 2)
                 elif count >= thresholds["warning"]:
-                    exit_status = max(exit_status, 1)
+                    source_status = max(source_status, 1)
 
             if total_taps > 0 and add_count_for_source > 0:
                 add_percentage = (add_count_for_source / total_taps) * 100
                 table_data.append({
-                    "oper_id": "oper_id",
-                    "action": "ADD_VS_TAPS_PCT",
+                    "oper_id": oper_id,
+                    "action": "TOKEN_ON_DL_FROM_COUNT",
                     "count": f"{add_percentage:.2f}%"
                 })
 
                 percentage_thresholds = ALERT_THRESHOLDS.get("PERCENTAGE")
                 if percentage_thresholds:
                     if add_percentage >= percentage_thresholds["critical"]:
-                        exit_status = max(exit_status, 2)
+                        source_status = max(source_status, 2)
                     elif add_percentage >= percentage_thresholds["warning"]:
-                        exit_status = max(exit_status, 1)
-                                                                                                                                                                                                                                            
+                        source_status = max(source_status, 1)
+            
+            exit_status = max(exit_status, source_status)
+
             if table_data:                                                                                                                                                           
                 summary = tabulate(table_data, headers="keys", tablefmt="grid")                                                                                                                                                             
                 # Log critical status only if overall exit_status is critical                                                                                                                                                               
-                if exit_status == 2:                                                                                                                                                                                                        
-                    logging.critical(f"CRITICAL: [{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                   
-                elif exit_status == 1:                                                                                                                                                                                                      
-                    logging.warning(f"WARNING:  [{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                    
+                if source_status == 2:                                                                                                                                                                                                        
+                    logging.critical(f"[{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                   
+                elif source_status == 1:                                                                                                                                                                                                      
+                    logging.warning(f"[{list_name}] Operator {oper_code} summary:\n{summary}")                                                                                                                                    
                 else:                                                                                                                                                                                                                       
-                    logging.info(f"OK:       [{list_name}] Operator {oper_code} summary:\n{summary}")
+                    logging.info(f"[{list_name}] Operator {oper_code} summary:\n{summary}")
 
             cursor.close()
 
