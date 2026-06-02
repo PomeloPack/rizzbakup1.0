@@ -70,7 +70,7 @@ def check_denylist_status() -> None:
         oper_id   = operator["oper_id"]
         oper_code = operator["code"]
 
-        # Get the STOPLIST_ENGINE property for the current operator
+        
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
         prop_query = """
             SELECT value FROM operator_property
@@ -82,7 +82,7 @@ def check_denylist_status() -> None:
 
         if not operator_stoplist_engine_prop:
             logging.warning(f"WARNING: Operator {oper_code} (ID: {oper_id}) has no 'STOPLIST_ENGINE' property. Skipping all denylist checks for this operator.")
-            continue # Skip this operator if no STOPLIST_ENGINE property is found
+            continue
 
         operator_stoplist_engine = operator_stoplist_engine_prop['value']
 
@@ -90,9 +90,9 @@ def check_denylist_status() -> None:
             list_name               = source["name"]
             stoplist_engine_value   = source["stoplist_engine_value"]
 
-            # Only process this source if its engine value matches the operator's configured engine
+            
             if stoplist_engine_value != operator_stoplist_engine:
-                continue # Skip to the next source
+                continue
 
             table                   = source["table"]
             table_alias             = source["table_alias"]
@@ -125,7 +125,7 @@ def check_denylist_status() -> None:
                 count       = row["count"]
                 action_name = ACTION_NAMES.get(action_code, f"UNKNOWN({action_code})")
 
-                row["action"] = action_name  # replace int with label for tabulate
+                row["action"] = action_name
                 table_data.append(row)
 
                 thresholds = ALERT_THRESHOLDS.get(action_name)
