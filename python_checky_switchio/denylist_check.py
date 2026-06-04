@@ -2,6 +2,7 @@
 import pymysql
 import sys
 import logging
+import time # Added for execution time
 from tabulate import tabulate
 
 # --- Logging setup ---
@@ -60,49 +61,73 @@ DENYLIST_SOURCES = [
 ]
 
 def check_denylist_status() -> None:
-    conn = pymysql.connect(
-        host="",
-        user="",
-        password="",
-        db="fare",
-        port=3306
-    )
+    start_time = time.time()
+    conn = None # Initialize conn to None
+    exit_status = 0 # Initialize exit_status here
 
-    cur = conn.cursor(pymysql.cursors.DictCursor)
-    cur.execute("SELECT oper_id, code FROM operator WHERE entity_type = 'operator'")
-    operators = cur.fetchall()
+    try:
+        conn = pymysql.connect(
+            host="",
+            user="",
+            password="",
+            db="fare",
+            port=3306,
+            read_timeout=60, # Added read_timeout for queries
+            write_timeout=60, # Added write_timeout for queries
+            connect_timeout=10 # Added connect_timeout for initial connection
+        )
 
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        try:
+            cur.execute("SELECT oper_id, code FROM operator WHERE entity_type = 'operator'")
+            operators = cur.fetchall()
+        except pymysql.Error as e:
+            logging.critical(f"Database error when fetching operators: {e}")
+            exit_status = 2 # Set critical status
+            return # Exit function, finally block will close connection
+        finally:
+            cur.close() # Ensure cursor is closed
 
-    exit_status = 0
-
-    for operator in operators:
-        oper_id   = operator["oper_id"]
-        oper_code = operator["code"]
+        for operator in operators:
+            oper_id   = operator["oper_id"]
+            oper_code = operator["code"]
 
         if oper_code in INACTIVE_OPERATORS:
             continue
         
         tap_cursor = conn.cursor(pymysql.cursors.DictCursor)
-        tap_query = """
-            SELECT COUNT(*) AS total_taps FROM tap
-            WHERE oper_id = %s AND registered = 1 AND server_dttm >= NOW() - INTERVAL 2 HOUR
-        """
-        tap_cursor.execute(tap_query, (oper_id,))
-        tap_count_result = tap_cursor.fetchone()
-        tap_cursor.close()
-        
-        total_taps = tap_count_result['total_taps'] if tap_count_result else 0
-        logging.info(f"Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
+        try:
+            tap_query = """
+                SELECT COUNT(*) AS total_taps FROM tap
+                WHERE oper_id = %s AND registered = 1 AND server_dttm >= NOW() - INTERVAL 2 HOUR
+            """
+            tap_cursor.execute(tap_query, (oper_id,))
+            tap_count_result = tap_cursor.fetchone()
+            
+            total_taps = tap_count_result['total_taps'] if tap_count_result else 0
+            logging.info(f"Operator {oper_code} (ID: {oper_id}) - {total_taps} registered taps in last 2 hours.")
+        except pymysql.Error as e:
+            logging.critical(f"Database error when fetching tap count for operator {oper_code} (ID: {oper_id}): {e}")
+            exit_status = max(exit_status, 2) # Set critical status, but continue with other operators
+            total_taps = 0 # Assume no taps if query fails
+        finally:
+            tap_cursor.close()
 
 
         prop_cursor = conn.cursor(pymysql.cursors.DictCursor)
-        prop_query = """
-            SELECT value FROM operator_property
-            WHERE operator_id = %s AND property_key = 'STOPLIST_ENGINE'
-        """
-        prop_cursor.execute(prop_query, (oper_id,))
-        operator_stoplist_engine_prop = prop_cursor.fetchone()
-        prop_cursor.close()
+        try:
+            prop_query = """
+                SELECT value FROM operator_property
+                WHERE operator_id = %s AND property_key = 'STOPLIST_ENGINE'
+            """
+            prop_cursor.execute(prop_query, (oper_id,))
+            operator_stoplist_engine_prop = prop_cursor.fetchone()
+        except pymysql.Error as e:
+            logging.critical(f"Database error when fetching STOPLIST_ENGINE property for operator {oper_code} (ID: {oper_id}): {e}")
+            exit_status = max(exit_status, 2)
+            operator_stoplist_engine_prop = None # Assume no property if query fails
+        finally:
+            prop_cursor.close()
 
         if not operator_stoplist_engine_prop:
             logging.warning(f"Operator {oper_code} (ID: {oper_id}) has no 'STOPLIST_ENGINE' property. Skipping all denylist checks for this operator.")
@@ -128,23 +153,30 @@ def check_denylist_status() -> None:
             time_col                = source["time_col"]
 
             cursor = conn.cursor(pymysql.cursors.DictCursor)
-            query = f"""
-                SELECT {table_alias}.{oper_col} AS oper_id, {table_alias}.{action_col} AS action, COUNT(*) AS count
-                FROM {table} {table_alias}
-                JOIN operator_property op ON {table_alias}.{oper_col} = op.operator_id
-                WHERE {table_alias}.{oper_col} = %s
-                  AND {table_alias}.{time_col} >= NOW() - INTERVAL 2 HOUR
-                  AND op.property_key = 'STOPLIST_ENGINE'
-                  AND op.value = %s
-                GROUP BY {table_alias}.{oper_col}, {table_alias}.{action_col}
-            """
-            cursor.execute(query, (oper_id, stoplist_engine_value))
-            rows = cursor.fetchall()
+            try:
+                query = f"""
+                    SELECT {table_alias}.{oper_col} AS oper_id, {table_alias}.{action_col} AS action, COUNT(*) AS count
+                    FROM {table} {table_alias}
+                    JOIN operator_property op ON {table_alias}.{oper_col} = op.operator_id
+                    WHERE {table_alias}.{oper_col} = %s
+                      AND {table_alias}.{time_col} >= NOW() - INTERVAL 2 HOUR
+                      AND op.property_key = 'STOPLIST_ENGINE'
+                      AND op.value = %s
+                    GROUP BY {table_alias}.{oper_col}, {table_alias}.{action_col}
+                """
+                cursor.execute(query, (oper_id, stoplist_engine_value))
+                rows = cursor.fetchall()
 
-            if not  rows:
-                logging.warning(f"[{list_name}] Operator {oper_code} - no denylist activity in last 2 hours")
+                if not  rows:
+                    logging.warning(f"[{list_name}] Operator {oper_code} - no denylist activity in last 2 hours")
+                    continue
+            except pymysql.Error as e:
+                logging.critical(f"Database error when fetching denylist entries for operator {oper_code} ({list_name}): {e}")
+                exit_status = max(exit_status, 2)
+                rows = [] # Clear rows to prevent further processing with bad data
+                continue # Skip to next source/operator if query fails
+            finally:
                 cursor.close()
-                continue
 
             table_data = []
             for row in rows:
@@ -194,9 +226,13 @@ def check_denylist_status() -> None:
                 else:                                                                                                                                                                                                                       
                     logging.info(f"[{list_name}] Operator {oper_code} summary:\n{summary}")
 
-            cursor.close()
+    finally:
+        if conn:
+            conn.close()
 
-    conn.close()
+    end_time = time.time()
+    execution_time = end_time - start_time
+    logging.info(f"Script finished in {execution_time:.2f} seconds with exit status: {exit_status}")
     sys.exit(exit_status)
 
 if __name__ == "__main__":
